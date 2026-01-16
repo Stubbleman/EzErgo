@@ -24,6 +24,7 @@ class AppState:
 
 class VialWorker(QObject):
     keymap_ready = Signal(object)  # Keymap
+    client_ready = Signal(object)  # VialClient
     status_changed = Signal(object)  # AppState
 
     def __init__(self) -> None:
@@ -84,6 +85,7 @@ class VialWorker(QObject):
             self._client = VialClient(t)
             keymap: Keymap = self._client.read_full_keymap()
             self.keymap_ready.emit(keymap)
+            self.client_ready.emit(self._client)
             self.status_changed.emit(AppState(connected=True, status_text="已連線"))
         except Exception as e:
             msg = str(e).strip().replace("\n", " ")
@@ -112,6 +114,7 @@ def main() -> int:
     tray.show()
 
     worker.keymap_ready.connect(win.set_keymap)
+    worker.client_ready.connect(win.set_vial_client)
     worker.status_changed.connect(lambda s: tray.set_status(s.status_text))
     worker.status_changed.connect(lambda s: win.set_status(s.status_text))
 

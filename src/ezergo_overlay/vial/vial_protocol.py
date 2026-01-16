@@ -42,20 +42,27 @@ class VialHidProtocol:
     def close(self) -> None:
         self._t.close()
 
-    def exchange(self, msg: bytes) -> bytes:
+    def exchange(self, msg: bytes, timeout_ms: int | None = None, retries: int | None = None) -> bytes:
         """
         Send a single command and read back the 32-byte response.
+        
+        Args:
+            msg: Message to send
+            timeout_ms: Optional timeout in milliseconds (uses instance default if None)
+            retries: Optional number of retries (uses instance default if None)
         """
         payload = ensure_report_size(msg, MSG_LEN)
+        timeout = self._timeout_ms if timeout_ms is None else timeout_ms
+        retry_count = self._retries if retries is None else retries
         last_err: Exception | None = None
-        for attempt in range(max(1, self._retries)):
+        for attempt in range(max(1, retry_count)):
             if attempt:
                 time.sleep(0.15)
             try:
                 written = self._t.write(self._report_id + payload)
                 if written < 1:
                     continue
-                data = self._t.read(MSG_LEN, timeout_ms=self._timeout_ms)
+                data = self._t.read(MSG_LEN, timeout_ms=timeout)
                 if not data:
                     continue
                 if len(data) != MSG_LEN:

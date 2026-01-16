@@ -10,6 +10,7 @@ from typing import Optional
 from ezergo_overlay.model.keymap_model import Keymap, MatrixSize, PhysicalKey
 from ezergo_overlay.vial.constants import (
     BUFFER_FETCH_CHUNK,
+    CMD_VIA_GET_KEYBOARD_VALUE,
     CMD_VIA_GET_LAYER_COUNT,
     CMD_VIA_GET_PROTOCOL_VERSION,
     CMD_VIA_KEYMAP_GET_BUFFER,
@@ -17,7 +18,12 @@ from ezergo_overlay.vial.constants import (
     CMD_VIAL_GET_DEFINITION,
     CMD_VIAL_GET_KEYBOARD_ID,
     CMD_VIAL_GET_SIZE,
+    CMD_VIAL_GET_UNLOCK_STATUS,
+    CMD_VIAL_UNLOCK_POLL,
+    CMD_VIAL_UNLOCK_START,
     MSG_LEN,
+    VIA_SWITCH_MATRIX_STATE,
+    VIAL_PROTOCOL_MATRIX_TESTER,
 )
 from ezergo_overlay.vial.errors import VialProtocolError, VialTimeoutError
 from ezergo_overlay.vial.hid_transport import IHidTransport
@@ -205,5 +211,66 @@ class VialClient:
         if len(out) != size:
             raise VialProtocolError(f"keymap buffer size mismatch: {len(out)} != {size}")
         return bytes(out)
+
+    def get_unlock_status(self, retries: int = 20) -> int:
+        """
+        獲取鍵盤解鎖狀態。
+        返回: 0 = 鎖定, 1 = 已解鎖
+        """
+        meta = self.get_device_meta()
+        if meta.vial_protocol < 0:
+            # VIA 鍵盤始終解鎖
+            return 1
+        
+        data = self._t.exchange(
+            struct.pack("BB", CMD_VIA_VIAL_PREFIX, CMD_VIAL_GET_UNLOCK_STATUS),
+            timeout_ms=500,
+            retries=retries
+        )
+        return int(data[0])
+
+    def unlock_start(self) -> None:
+        """開始解鎖流程"""
+        meta = self.get_device_meta()
+        if meta.vial_protocol < 0:
+            # VIA 鍵盤不需要解鎖
+            return
+        self._t.exchange(
+            struct.pack("BB", CMD_VIA_VIAL_PREFIX, CMD_VIAL_UNLOCK_START),
+            timeout_ms=500,
+            retries=20
+        )
+
+    def unlock_poll(self) -> bytes:
+        """
+        輪詢解鎖狀態。
+        返回: [unlocked, in_progress, counter, ...]
+        """
+        meta = self.get_device_meta()
+        if meta.vial_protocol < 0:
+            # VIA 鍵盤不需要解鎖
+            return b"\x01\x00\x00"
+        data = self._t.exchange(
+            struct.pack("BB", CMD_VIA_VIAL_PREFIX, CMD_VIAL_UNLOCK_POLL),
+            timeout_ms=500,
+            retries=20
+        )
+        return data
+
+    def matrix_poll(self) -> bytes:
+        """
+        獲取矩陣狀態（需要鍵盤已解鎖）。
+        返回的數據格式：前 2 字節是 VIAL 標識，之後是每行的按鍵狀態（每個 bit 代表一個按鍵）。
+        """
+        meta = self.get_device_meta()
+        if meta.via_protocol < 0:
+            raise VialProtocolError("matrix_poll requires VIA/Vial protocol")
+        
+        data = self._t.exchange(
+            struct.pack("BB", CMD_VIA_GET_KEYBOARD_VALUE, VIA_SWITCH_MATRIX_STATE),
+            timeout_ms=300,
+            retries=3
+        )
+        return data
 
 
