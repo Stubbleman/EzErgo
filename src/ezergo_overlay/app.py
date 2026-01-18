@@ -6,9 +6,10 @@ import time
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from ezergo_overlay.model.keymap_model import Keymap
+from ezergo_overlay.singleton import SingleInstance
 from ezergo_overlay.ui.overlay_window import OverlayWindow
 from ezergo_overlay.ui.tray import TrayController
 from ezergo_overlay.vial.errors import HidNotAvailableError
@@ -99,37 +100,62 @@ class VialWorker(QObject):
 
 
 def main() -> int:
-    app = QApplication(sys.argv)
+    # 檢查是否已有實例在運行
+    singleton = SingleInstance()
+    if singleton.is_running():
+        # 需要創建 QApplication 才能顯示訊息框
+        app = QApplication(sys.argv)
+        QMessageBox.warning(
+            None,
+            "應用程式已運行",
+            "EzErgo Overlay 已經在運行中，無法啟動第二個實例。",
+        )
+        return 1
 
-    win = OverlayWindow()
-    win.show()
+    # 獲取鎖並保持應用程式運行期間
+    try:
+        with singleton:
+            app = QApplication(sys.argv)
 
-    worker = VialWorker()
-    thread = threading.Thread(target=worker.run_loop, daemon=True)
+            win = OverlayWindow()
+            win.show()
 
-    def on_reconnect() -> None:
-        worker.reconnect()
+            worker = VialWorker()
+            thread = threading.Thread(target=worker.run_loop, daemon=True)
 
-    tray = TrayController(win, on_reconnect=on_reconnect)
-    tray.show()
+            def on_reconnect() -> None:
+                worker.reconnect()
 
-    worker.keymap_ready.connect(win.set_keymap)
-    worker.client_ready.connect(win.set_vial_client)
-    worker.status_changed.connect(lambda s: tray.set_status(s.status_text))
-    worker.status_changed.connect(lambda s: win.set_status(s.status_text))
+            tray = TrayController(win, on_reconnect=on_reconnect)
+            tray.show()
 
-    thread.start()
+            worker.keymap_ready.connect(win.set_keymap)
+            worker.client_ready.connect(win.set_vial_client)
+            worker.status_changed.connect(lambda s: tray.set_status(s.status_text))
+            worker.status_changed.connect(lambda s: win.set_status(s.status_text))
 
-    def on_about_to_quit() -> None:
-        worker.stop()
+            thread.start()
 
-    app.aboutToQuit.connect(on_about_to_quit)
+            def on_about_to_quit() -> None:
+                worker.stop()
 
-    # Ensure timer exists so Qt keeps event loop responsive on some platforms
-    keepalive = QTimer()
-    keepalive.start(1000)
-    keepalive.timeout.connect(lambda: None)
+            app.aboutToQuit.connect(on_about_to_quit)
 
-    return app.exec()
+            # Ensure timer exists so Qt keeps event loop responsive on some platforms
+            keepalive = QTimer()
+            keepalive.start(1000)
+            keepalive.timeout.connect(lambda: None)
+
+            return app.exec()
+    except (OSError, IOError):
+        # 如果無法獲取鎖（理論上不應該發生，因為已經檢查過）
+        # 但在極少數情況下可能發生競態條件
+        app = QApplication(sys.argv)
+        QMessageBox.warning(
+            None,
+            "啟動失敗",
+            "無法啟動應用程式，可能已有實例在運行。",
+        )
+        return 1
 
 
