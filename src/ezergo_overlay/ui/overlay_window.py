@@ -81,6 +81,9 @@ class OverlayWindow(QWidget):
         # 創建鍵盤監聽器
         self._keyboard_listener = KeyboardListener(self)
         self._keyboard_listener.mo_key_pressed.connect(self._on_mo_key_pressed)
+        # 連接按鍵按下/釋放信號以實現高亮
+        self._keyboard_listener.key_pressed.connect(self._keyboard.highlight_key)
+        self._keyboard_listener.key_released.connect(self._keyboard.unhighlight_key)
         self._vial_client = None
 
         self._grip = QSizeGrip(self)

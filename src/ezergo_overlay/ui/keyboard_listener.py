@@ -20,6 +20,8 @@ class KeyboardListener(QObject):
     """
 
     mo_key_pressed = Signal(int)  # 發出層號
+    key_pressed = Signal(int, int)  # 發出 (row, col) 當按鍵被按下
+    key_released = Signal(int, int)  # 發出 (row, col) 當按鍵被釋放
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -188,6 +190,16 @@ class KeyboardListener(QObject):
 
                 # 檢測按鍵按下和釋放事件
                 current_layer = self._current_layer
+                
+                # 發送按鍵按下/釋放事件用於 UI 高亮
+                for (row, col), pressed in current_state.items():
+                    was_pressed = self._last_matrix_state.get((row, col), False)
+                    if pressed and not was_pressed:
+                        # 按鍵剛被按下
+                        self.key_pressed.emit(row, col)
+                    elif not pressed and was_pressed:
+                        # 按鍵剛被釋放
+                        self.key_released.emit(row, col)
                 
                 # 檢查當前激活的 MO 鍵是否仍然被按下
                 # 注意：我們需要在 MO 鍵被定義的原始層中檢查，而不是當前激活的層

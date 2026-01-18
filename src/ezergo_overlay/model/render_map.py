@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ezergo_overlay.model.keycode_tables import BASIC, MASKED_MOD_OUTER, SHIFTED
+from ezergo_overlay.model.keycode_tables import BASIC, MASKED_MOD_OUTER, MOD_TAP_OUTER, SHIFTED
 from ezergo_overlay.vial.vial_keycodes import vial_label_for_code
 
 
@@ -33,7 +33,17 @@ def render_keycode_minimal(keycode: int) -> KeyRender:
     if base is not None:
         return KeyRender(text=base)
 
-    # 3) Common layer keycodes (protocol v6 style; matches vial-gui keycodes_v6.kc)
+    # 3) MOD_TAP keycodes (0x2000-0x3FFF): LCTL_T(kc), LSFT_T(kc), etc.
+    # Format: QK_MOD_TAP (0x2000) | (mod << 8) | kc
+    if 0x2000 <= kc < 0x4000:
+        outer = kc & 0xFF00
+        inner = kc & 0x00FF
+        mod_tap = MOD_TAP_OUTER.get(outer)
+        if mod_tap is not None and inner:
+            inner_txt = BASIC.get(inner) or SHIFTED.get(inner) or f"0x{inner:02X}"
+            return KeyRender(text=f"{mod_tap}({inner_txt})")
+
+    # 4) Common layer keycodes (protocol v6 style; matches vial-gui keycodes_v6.kc)
     # QK_TO=0x5200, QK_MOMENTARY=0x5220, QK_DEF_LAYER=0x5240, QK_TOGGLE_LAYER=0x5260
     # QK_ONE_SHOT_LAYER=0x5280, QK_LAYER_TAP_TOGGLE=0x52C0, QK_PERSISTENT_DEF_LAYER=0x52E0
     def _range(prefix: int, name: str) -> str | None:
@@ -54,7 +64,7 @@ def render_keycode_minimal(keycode: int) -> KeyRender:
         if r is not None:
             return KeyRender(text=r)
 
-    # 4) Masked modifiers (LCTL(kc), LSFT(kc), etc) – display compactly like Vial.
+    # 5) Masked modifiers (LCTL(kc), LSFT(kc), etc) – display compactly like Vial.
     outer = kc & 0xFF00
     inner = kc & 0x00FF
     mod = MASKED_MOD_OUTER.get(outer)
@@ -62,7 +72,7 @@ def render_keycode_minimal(keycode: int) -> KeyRender:
         inner_txt = BASIC.get(inner) or SHIFTED.get(inner) or f"0x{inner:02X}"
         return KeyRender(text=f"{mod}({inner_txt})")
 
-    # 5) Fallback
+    # 6) Fallback
     return KeyRender(text=f"0x{kc:04X}")
 
 

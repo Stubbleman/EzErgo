@@ -33,11 +33,16 @@ class KeyboardView(QGraphicsView):
         # 按鍵顏色設置
         self._key_bg_color = QColor(255, 255, 255, 22)
         self._key_font_color = QColor("#E6E8EB")
+        # 高亮顏色（按下時的顏色）
+        self._key_highlight_color = QColor(100, 150, 255, 120)
+        # 追蹤被按下的按鍵：{(row, col): True}
+        self._pressed_keys: set[tuple[int, int]] = set()
 
     def set_keymap(self, keymap: Keymap) -> None:
         self._keymap = keymap
         self._layer = 0
         self._max_layers = max(1, int(keymap.layers))
+        self._pressed_keys.clear()  # 清除所有高亮狀態
         self._rebuild_scene()
 
     def set_layer(self, layer: int) -> None:
@@ -175,8 +180,24 @@ class KeyboardView(QGraphicsView):
         self._key_font_color = QColor(font_r, font_g, font_b)
         
         # 更新所有現有的按鍵矩形和文字
-        for rect in self._key_rects:
-            rect.setBrush(self._key_bg_color)
+        # 只更新未按下的按鍵顏色，保留已按下按鍵的高亮
+        if self._keymap is not None:
+            for idx, rect in enumerate(self._key_rects):
+                # 檢查這個按鍵是否被按下
+                is_pressed = False
+                if self._physical:
+                    if idx < len(self._physical):
+                        pk = self._physical[idx]
+                        is_pressed = (pk.row, pk.col) in self._pressed_keys
+                else:
+                    cols = self._keymap.matrix.cols
+                    row = idx // cols
+                    col = idx % cols
+                    is_pressed = (row, col) in self._pressed_keys
+                
+                if not is_pressed:
+                    rect.setBrush(self._key_bg_color)
+        
         for text in self._key_texts:
             text.setBrush(self._key_font_color)
         
@@ -217,6 +238,51 @@ class KeyboardView(QGraphicsView):
                         return r * cols + c
         
         return None
+
+    def _get_key_index_from_matrix(self, row: int, col: int) -> int | None:
+        """從矩陣座標 (row, col) 獲取按鍵索引"""
+        if self._keymap is None:
+            return None
+        
+        if self._physical:
+            # 在 physical_keys 中查找對應的 (row, col)
+            for idx, pk in enumerate(self._physical):
+                if pk.row == row and pk.col == col:
+                    return idx
+            return None
+        else:
+            # 使用矩陣索引計算
+            cols = self._keymap.matrix.cols
+            if row < 0 or row >= self._keymap.matrix.rows or col < 0 or col >= cols:
+                return None
+            return row * cols + col
+
+    def highlight_key(self, row: int, col: int) -> None:
+        """高亮指定位置的按鍵"""
+        idx = self._get_key_index_from_matrix(row, col)
+        if idx is None or idx >= len(self._key_rects):
+            return
+        
+        self._pressed_keys.add((row, col))
+        rect = self._key_rects[idx]
+        rect.setBrush(self._key_highlight_color)
+        self._scene.update()
+
+    def unhighlight_key(self, row: int, col: int) -> None:
+        """取消高亮指定位置的按鍵"""
+        idx = self._get_key_index_from_matrix(row, col)
+        if idx is None or idx >= len(self._key_rects):
+            return
+        
+        self._pressed_keys.discard((row, col))
+        rect = self._key_rects[idx]
+        rect.setBrush(self._key_bg_color)
+        self._scene.update()
+
+    def clear_all_highlights(self) -> None:
+        """清除所有高亮"""
+        for row, col in list(self._pressed_keys):
+            self.unhighlight_key(row, col)
 
 
 

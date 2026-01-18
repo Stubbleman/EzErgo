@@ -121,3 +121,27 @@ MASKED_MOD_OUTER: dict[int, str] = {
     0x0F00: "Hyp",  # HYPR(kc)
 }
 
+
+# MOD_TAP keycodes (0x2000-0x3FFF): QK_MOD_TAP | (mod << 8) | kc
+# These are tap-hold keys like LCTL_T(kc), LSFT_T(kc), etc.
+MOD_TAP_OUTER: dict[int, str] = {
+    0x2100: "C_T",  # LCTL_T(kc)
+    0x2200: "S_T",  # LSFT_T(kc)
+    0x2400: "A_T",  # LALT_T(kc)
+    0x2800: "G_T",  # LGUI_T(kc)
+    0x2300: "CS_T",  # C_S_T(kc)
+    0x2500: "CA_T",  # LCA_T(kc)
+    0x2900: "CG_T",  # LCG_T(kc)
+    0x2600: "SA_T",  # LSA_T(kc)
+    0x2C00: "AG_T",  # LAG_T(kc)
+    0x2A00: "SG_T",  # SGUI_T(kc)
+    0x2D00: "CAG_T",  # LCAG_T(kc)
+    0x2700: "Meh_T",  # MEH_T(kc)
+    0x2F00: "All_T",  # ALL_T(kc) / HYPR_T(kc)
+    0x3100: "RC_T",  # RCTL_T(kc)
+    0x3200: "RS_T",  # RSFT_T(kc)
+    0x3400: "RA_T",  # RALT_T(kc)
+    0x3800: "RG_T",  # RGUI_T(kc)
+    0x3900: "RCG_T",  # RCG_T(kc)
+    0x3D00: "RCAG_T",  # RCAG_T(kc)
+}
