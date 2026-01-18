@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib.machinery import SourceFileLoader
@@ -10,11 +11,37 @@ from typing import Any
 
 
 def _project_root() -> Path:
+    """獲取專案根目錄，支援打包後的環境"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包後的環境
+        # 在打包環境中，third_party 目錄會被放在可執行檔旁邊
+        base_path = Path(sys.executable).parent
+        # 嘗試在可執行檔目錄下找到 third_party
+        third_party_path = base_path / 'third_party' / 'vial-gui' / 'src' / 'main' / 'python'
+        if third_party_path.exists():
+            return base_path
+        # 如果找不到，使用 _MEIPASS（臨時解壓目錄）
+        if hasattr(sys, '_MEIPASS'):
+            return Path(sys._MEIPASS)
+    # 正常環境：從當前文件位置推算
     # src/ezergo_overlay/vial/vial_keycodes.py -> repo root is 3 levels up
     return Path(__file__).resolve().parents[3]
 
 
 def _vial_gui_py_root() -> Path:
+    """獲取 vial-gui Python 源碼目錄，支援打包後的環境"""
+    if getattr(sys, 'frozen', False):
+        # 打包環境中，third_party 在可執行檔旁邊或 _MEIPASS 中
+        base_path = _project_root()
+        third_party_path = base_path / 'third_party' / 'vial-gui' / 'src' / 'main' / 'python'
+        if third_party_path.exists():
+            return third_party_path
+        # 嘗試在 _MEIPASS 中查找
+        if hasattr(sys, '_MEIPASS'):
+            meipass_path = Path(sys._MEIPASS) / 'third_party' / 'vial-gui' / 'src' / 'main' / 'python'
+            if meipass_path.exists():
+                return meipass_path
+    # 正常環境
     return _project_root() / "third_party" / "vial-gui" / "src" / "main" / "python"
 
 
@@ -118,4 +145,3 @@ def vial_label_for_code(code: int) -> str | None:
     if lab is None:
         return None
     return lab.label_for_code(code)
-
