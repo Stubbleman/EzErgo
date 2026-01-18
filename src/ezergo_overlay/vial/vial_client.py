@@ -257,6 +257,30 @@ class VialClient:
         )
         return data
 
+    def get_unlock_keys(self) -> list[tuple[int, int]]:
+        """
+        獲取需要按住的解鎖按鍵列表。
+        返回: [(row, col), ...] 列表，最多 15 個按鍵
+        """
+        meta = self.get_device_meta()
+        if meta.vial_protocol < 0:
+            # VIA 鍵盤不需要解鎖
+            return []
+        
+        data = self._t.exchange(
+            struct.pack("BB", CMD_VIA_VIAL_PREFIX, CMD_VIAL_GET_UNLOCK_STATUS),
+            timeout_ms=500,
+            retries=20
+        )
+        
+        rowcol: list[tuple[int, int]] = []
+        for x in range(15):
+            row = int(data[2 + x * 2])
+            col = int(data[3 + x * 2])
+            if row != 255 and col != 255:
+                rowcol.append((row, col))
+        return rowcol
+
     def matrix_poll(self) -> bytes:
         """
         獲取矩陣狀態（需要鍵盤已解鎖）。

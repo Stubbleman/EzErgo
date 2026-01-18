@@ -4,12 +4,13 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint, QEvent, Qt
 from PySide6.QtGui import QBrush, QColor, QKeySequence, QPainter, QPen, QShortcut
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizeGrip, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QSizeGrip, QVBoxLayout, QWidget
 
 from ezergo_overlay.model.settings import OverlaySettings, SettingsManager
 from ezergo_overlay.ui.keyboard_listener import KeyboardListener
 from ezergo_overlay.ui.keyboard_view import KeyboardView
 from ezergo_overlay.ui.settings_window import SettingsWindow
+from ezergo_overlay.ui.unlock_dialog import UnlockDialog
 
 if TYPE_CHECKING:
     from ezergo_overlay.vial.vial_client import VialClient
@@ -212,26 +213,71 @@ class OverlayWindow(QWidget):
         """設置 Vial 客戶端給鍵盤監聽器"""
         self._vial_client = client
         self._keyboard_listener.set_vial_client(client)
-        # 如果 keymap 已經設置，嘗試啟動監聽器
-        # 嘗試啟動監聽器（如果 keymap 未設置，start 會返回 False）
-        if not self._keyboard_listener.start():
-            # 如果啟動失敗，可能是 keymap 還未設置，稍後會在 set_keymap 中重試
-            pass
+        # 如果 keymap 已經設置，檢查解鎖狀態
+        if self._keyboard._keymap is not None:
+            self._check_and_unlock()
         else:
-            self.set_status("已連線")
+            # 如果 keymap 未設置，稍後會在 set_keymap 中檢查解鎖狀態
+            self.set_status("等待鍵盤配置...")
 
     def set_keymap(self, keymap) -> None:
         self._keyboard.set_keymap(keymap)
         self._keyboard_listener.set_keymap(keymap)
-        # 如果 Vial 客戶端已經設置，嘗試啟動鍵盤監聽器
+        # 如果 Vial 客戶端已經設置，檢查是否需要解鎖
         if self._vial_client is not None:
-            if not self._keyboard_listener.start():
-                self.set_status("鍵盤監聽未啟動")
-            else:
-                self.set_status("已連線")
+            self._check_and_unlock()
         else:
             self.set_status("等待鍵盤連接...")
         self._sync_layer_label()
+
+    def _check_and_unlock(self) -> None:
+        """檢查鍵盤解鎖狀態，如果需要則顯示解鎖對話框"""
+        if self._vial_client is None:
+            return
+
+        try:
+            unlocked = self._vial_client.get_unlock_status()
+            if unlocked == 1:
+                # 已解鎖，啟動鍵盤監聽器
+                if not self._keyboard_listener.start():
+                    self.set_status("鍵盤監聽未啟動")
+                else:
+                    self.set_status("已連線")
+                return
+
+            # 需要解鎖，獲取解鎖按鍵並顯示對話框
+            unlock_keys = self._vial_client.get_unlock_keys()
+            if not unlock_keys:
+                self.set_status("無法獲取解鎖按鍵")
+                return
+
+            # 創建一個臨時的 KeyboardView 用於解鎖對話框
+            # 複製當前的 keymap 和顏色設置
+            temp_keyboard = KeyboardView()
+            if self._keyboard._keymap is not None:
+                temp_keyboard.set_keymap(self._keyboard._keymap)
+            temp_keyboard.set_key_colors(
+                self._keyboard._key_bg_color.red(),
+                self._keyboard._key_bg_color.green(),
+                self._keyboard._key_bg_color.blue(),
+                self._keyboard._key_bg_color.alpha(),
+                self._keyboard._key_font_color.red(),
+                self._keyboard._key_font_color.green(),
+                self._keyboard._key_font_color.blue(),
+            )
+            temp_keyboard.setFixedSize(400, 200)
+
+            dialog = UnlockDialog(self, self._vial_client, temp_keyboard, unlock_keys)
+            if dialog.exec() == QDialog.Accepted:
+                # 解鎖成功，啟動鍵盤監聽器
+                if not self._keyboard_listener.start():
+                    self.set_status("鍵盤監聽未啟動")
+                else:
+                    self.set_status("已連線")
+            else:
+                self.set_status("解鎖已取消")
+        except Exception as e:
+            self.set_status(f"解鎖檢查錯誤: {type(e).__name__}")
 
     def set_status(self, text: str) -> None:
         self._status_label.setText(text)
