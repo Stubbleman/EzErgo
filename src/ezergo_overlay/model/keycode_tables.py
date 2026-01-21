@@ -33,6 +33,22 @@ BASIC: dict[int, str] = {
     0x57: "+",
     0x58: "Ent",
     0x65: "Menu",
+    # Media keys (HID usage codes)
+    0xA5: "Pwr",  # KC_PWR
+    0xA6: "Sleep",  # KC_SLEP
+    0xA7: "Wake",  # KC_WAKE
+    0xA8: "Mute",  # KC_MUTE
+    0xA9: "Vol+",  # KC_VOLU
+    0xAA: "Vol-",  # KC_VOLD
+    0xAB: "Next",  # KC_MNXT
+    0xAC: "Prev",  # KC_MPRV
+    0xAD: "Stop",  # KC_MSTP
+    0xAE: "Play",  # KC_MPLY
+    0xB0: "Eject",  # KC_EJCT
+    0xBB: "FFwd",  # KC_MFFD
+    0xBC: "Rwd",  # KC_MRWD
+    0xBD: "Br+",  # KC_BRIU
+    0xBE: "Br-",  # KC_BRID
     0xE0: "LCtrl",
     0xE1: "LShift",
     0xE2: "LAlt",
