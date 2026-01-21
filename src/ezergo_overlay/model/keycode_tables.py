@@ -119,6 +119,20 @@ MASKED_MOD_OUTER: dict[int, str] = {
     0x0D00: "CAG",  # LCAG(kc)
     0x0700: "Meh",  # MEH(kc)
     0x0F00: "Hyp",  # HYPR(kc)
+    # Right-side modifiers
+    0x1100: "RC",  # RCTL(kc)
+    0x1200: "RS",  # RSFT(kc)
+    0x1400: "RA",  # RALT(kc)
+    0x1800: "RG",  # RGUI(kc)
+    0x1300: "RCS",  # RCTL + RSFT
+    0x1500: "RCA",  # RCTL + RALT
+    0x1900: "RCG",  # RCTL + RGUI
+    0x1600: "RSA",  # RSFT + RALT
+    0x1C00: "RAG",  # RALT + RGUI
+    0x1A00: "RSG",  # RSFT + RGUI
+    0x1D00: "RCAG",  # RCTL + RALT + RGUI
+    0x1700: "RMeh",  # RCTL + RSFT + RALT
+    0x1F00: "RHyp",  # RCTL + RSFT + RALT + RGUI
 }
 
 
