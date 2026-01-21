@@ -27,6 +27,15 @@ def main() -> int:
         print("警告：third_party/vial-gui 目錄不存在")
         print("這可能會導致某些功能無法正常工作")
     
+    # 檢查 simpleeval（可選依賴，用於鍵碼標籤功能）
+    try:
+        import simpleeval
+        print("✓ simpleeval 已安裝（鍵碼標籤功能可用）")
+    except ImportError:
+        print("警告：simpleeval 未安裝")
+        print("打包後的可執行檔將顯示十六進制鍵碼而不是標籤")
+        print("要啟用完整功能，請執行：pip install simpleeval 或 pip install -e '.[vial]'")
+    
     # 執行 PyInstaller
     spec_file = PROJECT_ROOT / "ezergo_overlay.spec"
     if not spec_file.exists():

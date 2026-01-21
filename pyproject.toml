@@ -15,6 +15,11 @@ dependencies = [
 build = [
   "pyinstaller>=6.0",
 ]
+# 安裝 vial 可選依賴以啟用完整的鍵碼標籤功能（使用 vial-gui 的 Keycode 類）
+# 如果不安裝，將回退到顯示十六進制鍵碼
+vial = [
+  "simpleeval",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

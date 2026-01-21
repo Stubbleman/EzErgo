@@ -1,147 +1,37 @@
 from __future__ import annotations
 
-import ast
-import sys
-from dataclasses import dataclass
-from functools import lru_cache
-from importlib.machinery import SourceFileLoader
-from pathlib import Path
-from types import ModuleType
-from typing import Any
-
-
-def _project_root() -> Path:
-    """獲取專案根目錄，支援打包後的環境"""
-    if getattr(sys, 'frozen', False):
-        # PyInstaller 打包後的環境
-        # 在打包環境中，third_party 目錄會被放在可執行檔旁邊
-        base_path = Path(sys.executable).parent
-        # 嘗試在可執行檔目錄下找到 third_party
-        third_party_path = base_path / 'third_party' / 'vial-gui' / 'src' / 'main' / 'python'
-        if third_party_path.exists():
-            return base_path
-        # 如果找不到，使用 _MEIPASS（臨時解壓目錄）
-        if hasattr(sys, '_MEIPASS'):
-            return Path(sys._MEIPASS)
-    # 正常環境：從當前文件位置推算
-    # src/ezergo_overlay/vial/vial_keycodes.py -> repo root is 3 levels up
-    return Path(__file__).resolve().parents[3]
-
-
-def _vial_gui_py_root() -> Path:
-    """獲取 vial-gui Python 源碼目錄，支援打包後的環境"""
-    if getattr(sys, 'frozen', False):
-        # 打包環境中，third_party 在可執行檔旁邊或 _MEIPASS 中
-        base_path = _project_root()
-        third_party_path = base_path / 'third_party' / 'vial-gui' / 'src' / 'main' / 'python'
-        if third_party_path.exists():
-            return third_party_path
-        # 嘗試在 _MEIPASS 中查找
-        if hasattr(sys, '_MEIPASS'):
-            meipass_path = Path(sys._MEIPASS) / 'third_party' / 'vial-gui' / 'src' / 'main' / 'python'
-            if meipass_path.exists():
-                return meipass_path
-    # 正常環境
-    return _project_root() / "third_party" / "vial-gui" / "src" / "main" / "python"
-
-
-def _load_module_from_path(name: str, path: Path) -> ModuleType:
-    loader = SourceFileLoader(name, str(path))
-    mod = ModuleType(name)
-    loader.exec_module(mod)
-    return mod
-
-
-def _extract_qmk_id_to_label(keycodes_py: Path) -> dict[str, str]:
-    """
-    Parse vial-gui's keycodes.py and extract Keycode definitions without importing it.
-
-    We look for calls like:
-      K("KC_A", "A", ...)
-      Keycode("KC_A", "A", ...)
-    and capture the first two string args.
-    """
-    src = keycodes_py.read_text(encoding="utf-8", errors="replace")
-    tree = ast.parse(src, filename=str(keycodes_py))
-    out: dict[str, str] = {}
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if not isinstance(node.func, ast.Name):
-            continue
-        if node.func.id not in {"K", "Keycode"}:
-            continue
-        if len(node.args) < 2:
-            continue
-        a0, a1 = node.args[0], node.args[1]
-        if not (isinstance(a0, ast.Constant) and isinstance(a1, ast.Constant)):
-            continue
-        if not (isinstance(a0.value, str) and isinstance(a1.value, str)):
-            continue
-        out[a0.value] = a1.value
-    return out
-
-
-def _compact(label: str) -> str:
-    # Keep multi-line labels (Vial style) but remove excessive whitespace.
-    label = label.replace("\r\n", "\n").replace("\r", "\n")
-    lines = [ln.strip() for ln in label.split("\n")]
-    lines = [ln for ln in lines if ln]
-    if not lines:
-        return ""
-    return "\n".join(lines[:2])
-
-
-@dataclass(frozen=True, slots=True)
-class VialKeycodeLabeler:
-    code_to_label: dict[int, str]
-
-    def label_for_code(self, code: int) -> str | None:
-        return self.code_to_label.get(int(code))
-
-
-@lru_cache(maxsize=1)
-def get_vial_labeler() -> VialKeycodeLabeler | None:
-    """
-    Build a numeric keycode -> label mapping using vial-gui sources (protocol v6 table).
-
-    Returns None if the third_party folder is missing.
-    """
-    root = _vial_gui_py_root()
-    keycodes_py = root / "keycodes" / "keycodes.py"
-    keycodes_v6_py = root / "keycodes" / "keycodes_v6.py"
-    if not keycodes_py.exists() or not keycodes_v6_py.exists():
-        return None
-
-    qmk_to_label = _extract_qmk_id_to_label(keycodes_py)
-
-    mod = _load_module_from_path("_ezergo_vial_keycodes_v6", keycodes_v6_py)
-    # keycodes_v6.py defines a class keycodes_v6 with a kc dict
-    kc_cls = getattr(mod, "keycodes_v6", None)
-    if kc_cls is None or not hasattr(kc_cls, "kc"):
-        return None
-
-    kc: dict[str, Any] = dict(getattr(kc_cls, "kc"))
-
-    code_to_label: dict[int, str] = {}
-    for qmk_id, val in kc.items():
-        if not isinstance(val, int):
-            continue
-        label = qmk_to_label.get(qmk_id)
-        if label is None:
-            # Reasonable fallback when vial-gui doesn't define a label entry.
-            if qmk_id.startswith("KC_"):
-                label = qmk_id.replace("KC_", "")
-            else:
-                label = qmk_id
-        code_to_label[int(val)] = _compact(label)
-
-    return VialKeycodeLabeler(code_to_label=code_to_label)
+from ezergo_overlay.vial.vial_imports import get_keycode, is_keycode_available
 
 
 def vial_label_for_code(code: int) -> str | None:
-    lab = get_vial_labeler()
-    if lab is None:
+    """
+    使用 vial-gui 的 Keycode 類獲取鍵碼標籤。
+    
+    Args:
+        code: 整數鍵碼
+        
+    Returns:
+        標籤字符串，如果不可用則返回 None
+    """
+    if not is_keycode_available():
         return None
-    return lab.label_for_code(code)
+    
+    Keycode = get_keycode()
+    if Keycode is None:
+        return None
+    
+    try:
+        # 將整數鍵碼轉換為 QMK ID 字符串
+        qmk_id = Keycode.serialize(code)
+        if qmk_id is None:
+            return None
+        
+        # 獲取標籤
+        label = Keycode.label(qmk_id)
+        if label is None or label == qmk_id:
+            # 如果標籤不可用或與 QMK ID 相同，返回 None
+            return None
+        
+        return label
+    except (AttributeError, Exception):
+        return None

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ezergo_overlay.model.keycode_tables import BASIC, MASKED_MOD_OUTER, MOD_TAP_OUTER, SHIFTED
+from ezergo_overlay.vial.vial_imports import get_keycode, is_keycode_available
 from ezergo_overlay.vial.vial_keycodes import vial_label_for_code
 
 
@@ -11,68 +11,57 @@ class KeyRender:
     text: str
 
 
+def _simplify_label(label: str, prefer_unshifted: bool = False) -> str:
+    """
+    將 vial-gui 的多行標籤簡化為單行，適合 overlay 顯示。
+    
+    Args:
+        label: 多行標籤（如 "!\n1" 或 "LSft\n(kc)"）
+        prefer_unshifted: 如果為 True，對於多行標籤優先取最後一行（未 shift 狀態）
+    
+    例如：
+        "!\n1" -> "1" (prefer_unshifted=True) 或 "!" (prefer_unshifted=False)
+        "LSft\n(kc)" -> "LSft"
+    """
+    if not label:
+        return ""
+    lines = [ln.strip() for ln in label.split("\n") if ln.strip()]
+    if not lines:
+        return ""
+    # 對於多行標籤，根據 prefer_unshifted 選擇行
+    if prefer_unshifted and len(lines) > 1:
+        return lines[-1]  # 取最後一行（未 shift 狀態）
+    return lines[0]  # 默認取第一行
+
+
 def render_keycode_minimal(keycode: int) -> KeyRender:
     """
-    MVP: keep rendering conservative and predictable.
-    Later we can expand to full QMK/Vial keycode decoding.
+    使用 vial-gui 的 Keycode 類渲染鍵碼標籤。
+    優先使用 vial-gui 的標籤，如果不可用則使用 serialize() 作為回退。
     """
     kc = int(keycode)
-
-    # Prefer Vial's own display labels when available (full coverage).
+    
+    # 優先使用 Vial 的標籤（完整覆蓋，包括所有複雜鍵碼）
     vial_label = vial_label_for_code(kc)
     if vial_label is not None:
-        return KeyRender(text=vial_label)
-
-    # 1) Vial shifted keycodes (these are distinct codes like KC_EXLM=0x021E)
-    sym = SHIFTED.get(kc)
-    if sym is not None:
-        return KeyRender(text=sym)
-
-    # 2) Basic keycodes (0x00-0xFF) with Vial-friendly labels
-    base = BASIC.get(kc)
-    if base is not None:
-        return KeyRender(text=base)
-
-    # 3) MOD_TAP keycodes (0x2000-0x3FFF): LCTL_T(kc), LSFT_T(kc), etc.
-    # Format: QK_MOD_TAP (0x2000) | (mod << 8) | kc
-    if 0x2000 <= kc < 0x4000:
-        outer = kc & 0xFF00
-        inner = kc & 0x00FF
-        mod_tap = MOD_TAP_OUTER.get(outer)
-        if mod_tap is not None and inner:
-            inner_txt = BASIC.get(inner) or SHIFTED.get(inner) or f"0x{inner:02X}"
-            return KeyRender(text=f"{mod_tap}({inner_txt})")
-
-    # 4) Common layer keycodes (protocol v6 style; matches vial-gui keycodes_v6.kc)
-    # QK_TO=0x5200, QK_MOMENTARY=0x5220, QK_DEF_LAYER=0x5240, QK_TOGGLE_LAYER=0x5260
-    # QK_ONE_SHOT_LAYER=0x5280, QK_LAYER_TAP_TOGGLE=0x52C0, QK_PERSISTENT_DEF_LAYER=0x52E0
-    def _range(prefix: int, name: str) -> str | None:
-        if prefix <= kc < prefix + 32:
-            return f"{name}({kc - prefix})"
-        return None
-
-    for p, n in (
-        (0x5200, "TO"),
-        (0x5220, "MO"),
-        (0x5240, "DF"),
-        (0x5260, "TG"),
-        (0x5280, "OSL"),
-        (0x52C0, "TT"),
-        (0x52E0, "PDF"),
-    ):
-        r = _range(p, n)
-        if r is not None:
-            return KeyRender(text=r)
-
-    # 5) Masked modifiers (LCTL(kc), LSFT(kc), etc) – display compactly like Vial.
-    outer = kc & 0xFF00
-    inner = kc & 0x00FF
-    mod = MASKED_MOD_OUTER.get(outer)
-    if mod is not None and inner:
-        inner_txt = BASIC.get(inner) or SHIFTED.get(inner) or f"0x{inner:02X}"
-        return KeyRender(text=f"{mod}({inner_txt})")
-
-    # 6) Fallback
+        # 對於基本鍵碼（0x00-0xFF），優先顯示未 shift 狀態
+        # 對於其他鍵碼，使用第一行
+        is_basic = kc < 0x0100
+        simplified = _simplify_label(vial_label, prefer_unshifted=is_basic)
+        if simplified:
+            return KeyRender(text=simplified)
+    
+    # 回退：使用 Keycode.serialize() 獲取 QMK ID
+    if is_keycode_available():
+        Keycode = get_keycode()
+        if Keycode is not None:
+            try:
+                qmk_id = Keycode.serialize(kc)
+                if qmk_id and qmk_id != hex(kc):
+                    # 如果 serialize 返回有意義的 QMK ID，使用它
+                    return KeyRender(text=qmk_id)
+            except (AttributeError, Exception):
+                pass
+    
+    # 最終回退：顯示十六進制
     return KeyRender(text=f"0x{kc:04X}")
-
-
