@@ -15,7 +15,7 @@ EzErgo Overlay 是一個鍵盤提示應用程式，用於顯示 Vial 鍵盤的�
 ## 系統需求
 
 - Python 3.10 或更高版本
-- Linux 系統
+- Linux / Windows 
 - 支援 Vial 的鍵盤設備
 - Git（用於Clone 倉儲）
 
